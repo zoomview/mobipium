@@ -87,7 +87,11 @@ export async function fetchOffers(params: FetchOffersParams = {}): Promise<Mobip
 // Formats supported:
 // - "5m" -> 5 minutes
 // - "2h" -> 120 minutes
-// - "1d" -> 1440 minutes
+// - "51min" -> 51 minutes (Mobipium 常用格式)
+// - "6h18min" -> 6*60 + 18 = 378 minutes
+// - "1h58min" -> 1*60 + 58 = 118 minutes
+// - "0min" -> 0 minutes
+// - "5m", "2h", "1d" -> 标准格式
 // - "< 1m" -> 0.5 minutes (less than 1 minute)
 // - "just now" -> 0.5 minutes
 // - "now" -> 0.5 minutes
@@ -96,6 +100,20 @@ export function parseLastConv(lastConv: string | null): number | null {
   if (!lastConv) return null
 
   const trimmed = lastConv.trim().toLowerCase()
+
+  // 情况0: Mobipium 格式 "51min", "0min" 等 (分钟)
+  const minMatch = trimmed.match(/^(\d+)min$/)
+  if (minMatch) {
+    return parseInt(minMatch[1], 10)
+  }
+
+  // 情况0b: Mobipium 混合格式 "6h18min", "1h58min" 等
+  const hourMinMatch = trimmed.match(/^(\d+)h(\d+)min$/)
+  if (hourMinMatch) {
+    const hours = parseInt(hourMinMatch[1], 10)
+    const mins = parseInt(hourMinMatch[2], 10)
+    return hours * 60 + mins
+  }
 
   // 情况1: 标准格式 "5m", "2h", "1d"
   const standardMatch = trimmed.match(/^(\d+)([mhd])$/i)
