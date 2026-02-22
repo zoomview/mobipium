@@ -1,0 +1,59 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Offer {
+  id            String   @id @map("offer_id")
+  offerName     String   @map("offer_name")
+  status        String
+  country       String
+  countryName   String?  @map("country_name")
+  carrier       String?
+  vertical      String?
+  flow          String?
+  payout        Float
+  currency      String?
+  dailyCap      Int?     @map("daily_cap")
+  typeTraffic   String?  @map("type_traffic")
+  filledCap     Int?     @map("filled_cap")
+  lastConv      DateTime? @map("last_conv")
+  lastConvRaw   String?  @map("last_conv_raw")
+  snapshots     OfferSnapshot[]
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  @@map("offers")
+}
+
+model OfferSnapshot {
+  id          Int      @id @default(autoincrement())
+  offerId     String   @map("offer_id")
+  lastConv    DateTime? @map("last_conv")
+  lastConvRaw String?  @map("last_conv_raw")
+  filledCap   Int?     @map("filled_cap")
+  payout      Float
+  status      String
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  offer       Offer    @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  
+  @@map("offer_snapshots")
+}
+
+model AlertHistory {
+  id          Int      @id @default(autoincrement())
+  offerId     String   @map("offer_id")
+  offerName   String   @map("offer_name")
+  message     String
+  sentAt      DateTime @default(now()) @map("sent_at")
+  
+  @@map("alert_history")
+}
