@@ -77,13 +77,22 @@ export default function Home() {
         setOffers(data.data)
         setTotalPages(data.meta.totalPages)
 
-        // Calculate stats
-        const withConversions = data.data.filter((o: Offer) => o.lastConvRaw).length
-        setStats({
-          totalOffers: data.meta.total,
-          activeOffers: data.data.filter((o: Offer) => o.status === 'Active').length,
-          offersWithConversions: withConversions,
-        })
+        // 使用API返回的正确统计
+        if (data.stats) {
+          setStats({
+            totalOffers: data.stats.totalOffers,
+            activeOffers: data.stats.activeOffers,
+            offersWithConversions: data.stats.offersWithConversions,
+          })
+        } else {
+          // 兼容旧版本
+          const withConversions = data.data.filter((o: Offer) => o.lastConvRaw).length
+          setStats({
+            totalOffers: data.meta.total,
+            activeOffers: data.data.filter((o: Offer) => o.status === 'Active').length,
+            offersWithConversions: withConversions,
+          })
+        }
       } else {
         setError(data.error || 'Failed to fetch offers')
       }

@@ -156,6 +156,10 @@ export async function GET(request: Request) {
   // 分页
   const paginatedOffers = sortedOffers.slice(skip, skip + limit)
 
+  // 计算正确的统计（基于全部数据，不是当前页）
+  const totalActive = await prisma.offer.count({ where: { status: 'Active' } })
+  const totalWithConversion = await prisma.offer.count({ where: { hasConversion: true } })
+
   return NextResponse.json({
     success: true,
     data: paginatedOffers,
@@ -164,6 +168,11 @@ export async function GET(request: Request) {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
+    },
+    stats: {
+      totalOffers: total,
+      activeOffers: totalActive,
+      offersWithConversions: totalWithConversion,
     },
   })
 }
