@@ -151,12 +151,12 @@ export default function Home() {
     'Finance', 'Sweepstakes', 'VPN', 'Anti-Virus', 'Education',
     'Mobile Content', 'Video', 'Music', 'Apps', 'E-commerce'
   ]
-  const verticalsFromData = [...new Set(offers.map(o => o.vertical).filter(Boolean))]
+  const verticalsFromData = [...new Set(offers.map(o => o.vertical).filter((v): v is string => Boolean(v)))]
   const verticals = [...new Set([...COMMON_VERTICALS, ...verticalsFromData])].sort()
 
   // 常用 Flow 列表
   const COMMON_FLOWS = ['1 Click', 'DOI', 'PIN Submit', 'SOI', 'Email Submit', 'App Install']
-  const flowsFromData = [...new Set(offers.map(o => o.flow).filter(Boolean))]
+  const flowsFromData = [...new Set(offers.map(o => o.flow).filter((v): v is string => Boolean(v)))]
   const flows = [...new Set([...COMMON_FLOWS, ...flowsFromData])].sort()
   
   const statuses = ['Active', 'Paused', 'Blocked']
