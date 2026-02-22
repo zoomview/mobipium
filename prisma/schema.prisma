@@ -11,24 +11,30 @@ datasource db {
 }
 
 model Offer {
-  id            String   @id @map("offer_id")
-  offerName     String   @map("offer_name")
-  status        String
-  country       String
-  countryName   String?  @map("country_name")
-  carrier       String?
-  vertical      String?
-  flow          String?
-  payout        Float
-  currency      String?
-  dailyCap      Int?     @map("daily_cap")
-  typeTraffic   String?  @map("type_traffic")
-  filledCap     Int?     @map("filled_cap")
-  lastConv      DateTime? @map("last_conv")
-  lastConvRaw   String?  @map("last_conv_raw")
-  snapshots     OfferSnapshot[]
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id              String   @id @map("offer_id")
+  offerName       String   @map("offer_name")
+  status          String
+  country         String
+  countryName     String?  @map("country_name")
+  carrier         String?
+  vertical        String?
+  flow            String?
+  payout          Float
+  currency        String?
+  dailyCap        Int?     @map("daily_cap")
+  typeTraffic     String?  @map("type_traffic")
+  filledCap       Int?     @map("filled_cap")
+  lastConv        DateTime? @map("last_conv")
+  lastConvRaw     String?  @map("last_conv_raw")
+  
+  // 业务分级字段
+  hasConversion   Boolean  @default(false) @map("has_conversion")      // 是否有转化
+  lastConversionAt DateTime? @map("last_conversion_at")                  // 最后转化时间
+  priority        String   @default("LOW") @map("priority")            // 优先级: HIGH / LOW
+  
+  snapshots       OfferSnapshot[]
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
   
   @@map("offers")
 }

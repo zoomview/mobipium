@@ -26,6 +26,19 @@ export async function GET() {
       where: { lastConv: { gte: oneHourAgo } }
     })
     
+    // 业务分级统计
+    const highPriorityOffers = await prisma.offer.count({
+      where: { priority: 'HIGH' }
+    })
+    
+    const lowPriorityOffers = await prisma.offer.count({
+      where: { priority: 'LOW' }
+    })
+    
+    const offersWithConversion = await prisma.offer.count({
+      where: { hasConversion: true }
+    })
+    
     return NextResponse.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
@@ -35,7 +48,13 @@ export async function GET() {
         alertsLast24h, 
         activeOffersLast1h: activeOffers,
         oldestSnapshot: oldestSnapshot?.createdAt || null,
-        newestSnapshot: newestSnapshot?.createdAt || null
+        newestSnapshot: newestSnapshot?.createdAt || null,
+        // 业务分级统计
+        priority: {
+          high: highPriorityOffers,
+          low: lowPriorityOffers
+        },
+        hasConversion: offersWithConversion
       }
     })
   } catch (error) {

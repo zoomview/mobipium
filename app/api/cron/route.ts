@@ -185,6 +185,10 @@ export async function GET(request: Request) {
     const concurrency = parseInt(searchParams.get('concurrency') || '10', 10) // 默认10并发
     const usePerformanceSort = searchParams.get('usePerformanceSort') !== 'false'
     const maxTotalPages = 120
+    
+    // 业务分级参数
+    const priority = searchParams.get('priority') || 'ALL' // HIGH / LOW / ALL
+    console.log(`[Cron] Priority mode: ${priority}`)
 
     console.log(`[Cron] Config: pages=${maxPages}, concurrency=${concurrency}, sort=${usePerformanceSort ? 'Performance' : 'default'}`)
 
@@ -285,7 +289,14 @@ export async function GET(request: Request) {
       
       // 1. 批量 Upsert Offers (使用 for...of 串行，避免并发过高)
       for (const processed of batch) {
-        const { offer, payout, dailyCap, filledCap, lastConvDate } = processed
+        const { offer, payout, dailyCap, filledCap, lastConvDate, lastConvMinutes } = processed
+        
+        // 业务分级：判断是否有转化
+        const hasConversion = lastConvMinutes !== null
+        const now = new Date()
+        // 24小时内有转化 = HIGH priority，否则 = LOW
+        const isRecentConversion = hasConversion && lastConvMinutes !== null && lastConvMinutes <= 24 * 60
+        const newPriority = isRecentConversion ? 'HIGH' : 'LOW'
         
         await prisma.offer.upsert({
           where: { id: offer.offer_id },
@@ -305,6 +316,9 @@ export async function GET(request: Request) {
             filledCap,
             lastConv: lastConvDate,
             lastConvRaw: offer.last_conv,
+            hasConversion,
+            lastConversionAt: hasConversion ? now : null,
+            priority: newPriority,
           },
           update: {
             offerName: offer.offer_name,
@@ -321,6 +335,11 @@ export async function GET(request: Request) {
             filledCap,
             lastConv: lastConvDate,
             lastConvRaw: offer.last_conv,
+            hasConversion,
+            // 如果之前无转化，现在有转化 → 更新最后转化时间
+            lastConversionAt: hasConversion ? (processed.previousSnapshot?.lastConvRaw ? undefined : now) : undefined,
+            // 如果变成有转化或有新转化 → 提升为HIGH
+            priority: newPriority,
           },
         })
       }
