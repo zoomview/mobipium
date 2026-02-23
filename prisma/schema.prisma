@@ -63,3 +63,12 @@ model AlertHistory {
   
   @@map("alert_history")
 }
+
+// 转化列表：存储有转化时间的offer ID
+model ConversionList {
+  id          Int      @id @default(autoincrement())
+  offerId     String   @unique @map("offer_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  @@map("conversion_list")
+}

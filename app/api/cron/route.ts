@@ -188,38 +188,116 @@ export async function GET(request: Request) {
     
     // 业务分级参数
     const priority = searchParams.get('priority') || 'ALL' // HIGH / LOW / ALL
-    console.log(`[Cron] Priority mode: ${priority}`)
+    const status = searchParams.get('status') || 'Active'
+    
+    // 新增：按offer ID列表抓取
+    const offerIdsParam = searchParams.get('offerIds') // 逗号分隔的offer ID
+    
+    // 新增：自动按priority抓取 - 从数据库获取priority对应的offer ID列表
+    const fetchByPriority = searchParams.get('fetchByPriority') // HIGH / LOW / ALL
+    
+    console.log(`[Cron] Priority mode: ${priority}, Status: ${status}, fetchByPriority: ${fetchByPriority}`)
 
     console.log(`[Cron] Config: pages=${maxPages}, concurrency=${concurrency}, sort=${usePerformanceSort ? 'Performance' : 'default'}`)
 
-    // ============ 1. 并发抓取所有页面 (使用 p-limit) ============
-    const limit = pLimit(concurrency)
-    
-    const fetchPageWithRetry = async (pageNum: number): Promise<MobipiumOffer[]> => {
-      return limit(async () => {
-        return fetchWithRetry(async () => {
-          const offers = await fetchOffers({
-            status: 'Active',
-            limit: 100,
-            page: pageNum,
-            order_by: usePerformanceSort ? 'Performance' : undefined
-          })
-          console.log(`[Cron] Page ${pageNum}: got ${offers.length} offers`)
-          return offers
-        })
+    let allOffers: MobipiumOffer[] = []
+
+    // ============ 模式0: 从转化列表获取offer ============
+    if (fetchByPriority === 'HIGH') {
+      // 从转化列表获取有转化的offer ID
+      const conversionList = await prisma.conversionList.findMany({
+        select: { offerId: true }
       })
+      const offerIdList = conversionList.map(c => c.offerId)
+      console.log(`[Cron] Fetch from conversion list: ${offerIdList.length} offers`)
+      
+      if (offerIdList.length > 0) {
+        const limit = pLimit(concurrency)
+        
+        // 分批查询，每批最多50个ID
+        const BATCH_SIZE = 50
+        const batches: string[][] = []
+        for (let i = 0; i < offerIdList.length; i += BATCH_SIZE) {
+          batches.push(offerIdList.slice(i, i + BATCH_SIZE))
+        }
+        
+        const fetchBatch = async (batch: string[], index: number): Promise<MobipiumOffer[]> => {
+          return limit(async () => {
+            return fetchWithRetry(async () => {
+              const offers = await fetchOffers({
+                status,
+                offers: batch.join(','),
+              })
+              console.log(`[Cron] Batch ${index + 1}/${batches.length}: got ${offers.length} offers`)
+              return offers
+            })
+          })
+        }
+        
+        const results = await Promise.all(batches.map((batch, i) => fetchBatch(batch, i)))
+        allOffers = results.flat()
+      }
     }
+    // ============ 模式1: 按offer ID列表抓取（优先） ============
+    else if (offerIdsParam) {
+      const offerIdList = offerIdsParam.split(',').filter(id => id.trim())
+      console.log(`[Cron] Fetching by offer IDs: ${offerIdList.length} offers`)
+      
+      const limit = pLimit(concurrency)
+      
+      // 分批查询，每批最多50个ID
+      const BATCH_SIZE = 50
+      const batches: string[][] = []
+      for (let i = 0; i < offerIdList.length; i += BATCH_SIZE) {
+        batches.push(offerIdList.slice(i, i + BATCH_SIZE))
+      }
+      
+      const fetchBatch = async (batch: string[], index: number): Promise<MobipiumOffer[]> => {
+        return limit(async () => {
+          return fetchWithRetry(async () => {
+            const offers = await fetchOffers({
+              status,
+              offers: batch.join(','),
+            })
+            console.log(`[Cron] Batch ${index + 1}/${batches.length}: got ${offers.length} offers`)
+            return offers
+          })
+        })
+      }
+      
+      const results = await Promise.all(batches.map((batch, i) => fetchBatch(batch, i)))
+      allOffers = results.flat()
+    } 
+    // ============ 模式2: 按页数抓取（原有逻辑） ============
+    else {
+      const limit = pLimit(concurrency)
+      
+      const fetchPageWithRetry = async (pageNum: number): Promise<MobipiumOffer[]> => {
+        return limit(async () => {
+          return fetchWithRetry(async () => {
+            const offers = await fetchOffers({
+              status,
+              limit: 100,
+              page: pageNum,
+              order_by: usePerformanceSort ? 'Performance' : undefined
+            })
+            console.log(`[Cron] Page ${pageNum}: got ${offers.length} offers`)
+            return offers
+          })
+        })
+      }
 
-    // 生成所有页码
-    const allPages = Array.from(
-      { length: Math.min(maxPages, maxTotalPages - startPage + 1) },
-      (_, i) => startPage + i
-    ).filter(p => p <= maxTotalPages)
+      // 生成所有页码
+      const allPages = Array.from(
+        { length: Math.min(maxPages, maxTotalPages - startPage + 1) },
+        (_, i) => startPage + i
+      ).filter(p => p <= maxTotalPages)
 
-    console.log(`[Cron] Fetching ${allPages.length} pages with concurrency ${concurrency}...`)
-    
-    const results = await Promise.all(allPages.map(fetchPageWithRetry))
-    const allOffers = results.flat()
+      console.log(`[Cron] Fetching ${allPages.length} pages with concurrency ${concurrency}...`)
+      
+      const results = await Promise.all(allPages.map(fetchPageWithRetry))
+      allOffers = results.flat()
+    }
 
     console.log(`[Cron] Fetched ${allOffers.length} offers total`)
 
@@ -293,9 +371,16 @@ export async function GET(request: Request) {
         
         // 业务分级：判断是否有转化
         const hasConversion = lastConvMinutes !== null
+        
+        // 判断是否24小时内有转化
+        // lastConvDate是API返回的时间，需要和当前时间比较
         const now = new Date()
-        // 24小时内有转化 = HIGH priority，否则 = LOW
-        const isRecentConversion = hasConversion && lastConvMinutes !== null && lastConvMinutes <= 24 * 60
+        let isRecentConversion = false
+        if (lastConvDate && hasConversion) {
+          const hoursDiff = (now.getTime() - lastConvDate.getTime()) / (1000 * 60 * 60)
+          isRecentConversion = hoursDiff <= 24 // 24小时内
+        }
+        
         const newPriority = isRecentConversion ? 'HIGH' : 'LOW'
         
         await prisma.offer.upsert({
@@ -336,9 +421,9 @@ export async function GET(request: Request) {
             lastConv: lastConvDate,
             lastConvRaw: offer.last_conv,
             hasConversion,
-            // 如果之前无转化，现在有转化 → 更新最后转化时间
-            lastConversionAt: hasConversion ? (processed.previousSnapshot?.lastConvRaw ? undefined : now) : undefined,
-            // 如果变成有转化或有新转化 → 提升为HIGH
+            // 有转化时更新最后转化时间，无转化时清空
+            lastConversionAt: hasConversion ? now : null,
+            // 如果变成有转化或有新转化 → 提升为HIGH，24小时后无转化 → 降为LOW
             priority: newPriority,
           },
         })
@@ -423,15 +508,51 @@ export async function GET(request: Request) {
       )
     }
 
+    // ============ 6. 更新转化列表 ============
+    // 模式A: 全量抓取时 - 清空旧列表，插入新列表
+    if (!offerIdsParam && !fetchByPriority && allOffers.length > 0) {
+      const convertedOfferIds = allOffers
+        .filter(o => o.last_conv && o.last_conv !== null)
+        .map(o => o.offer_id)
+      
+      console.log(`[Cron] Updating conversion list with ${convertedOfferIds.length} offers...`)
+      
+      if (convertedOfferIds.length > 0) {
+        await prisma.$transaction([
+          prisma.conversionList.deleteMany({}),
+          prisma.conversionList.createMany({
+            data: convertedOfferIds.map(id => ({ offerId: id }))
+          })
+        ])
+        console.log(`[Cron] Conversion list updated (full sync)`)
+      }
+    }
+    
+    // 模式B: HIGH priority抓取时 - 检查并移除无转化的offer
+    if (fetchByPriority === 'HIGH' && allOffers.length > 0) {
+      // 找出本次查询中无转化的offer
+      const notConvertedOfferIds = allOffers
+        .filter(o => !o.last_conv || o.last_conv === null)
+        .map(o => o.offer_id)
+      
+      if (notConvertedOfferIds.length > 0) {
+        console.log(`[Cron] Removing ${notConvertedOfferIds.length} offers without conversion from list...`)
+        await prisma.conversionList.deleteMany({
+          where: { offerId: { in: notConvertedOfferIds } }
+        })
+        console.log(`[Cron] Removed ${notConvertedOfferIds.length} offers from conversion list`)
+      }
+    }
+
     const elapsed = Date.now() - startTime
     console.log(`[Cron] Completed in ${elapsed}ms. Offers: ${allOffers.length}, Snapshots: ${newSnapshots}, Alerts: ${alertsSent}`)
 
     return NextResponse.json({
       success: true,
       offersProcessed: allOffers.length,
-      pagesFetched: allPages.length,
+      offersFetched: allOffers.length,
       startPage,
-      hasMore: startPage + allPages.length < maxTotalPages,
+      hasMore: false, // 按ID列表抓取时不确定是否有更多
       newSnapshots,
       alertsSent,
       elapsedMs: elapsed,
