@@ -34,6 +34,7 @@ export async function GET(request: Request) {
   const vertical = searchParams.get('vertical')
   const carrier = searchParams.get('carrier')
   const search = searchParams.get('search')
+  const priority = searchParams.get('priority') // HIGH / LOW / ALL
   
   // Sorting - 白名单验证
   let sortBy = searchParams.get('sortBy') || 'updatedAt'
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
   if (sortOrder !== 'asc' && sortOrder !== 'desc') {
     sortOrder = 'desc' // 默认值
   }
-
+  
   // Build where clause
   const where: Record<string, unknown> = {}
   
@@ -56,6 +57,7 @@ export async function GET(request: Request) {
   if (status) where.status = status
   if (vertical) where.vertical = vertical
   if (carrier) where.carrier = carrier
+  if (priority && priority !== 'ALL') where.priority = priority
   if (search) {
     where.OR = [
       { offerName: { contains: search, mode: 'insensitive' } },
