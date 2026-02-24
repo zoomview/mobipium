@@ -326,7 +326,7 @@ export default function Home() {
         {/* Chart Section */}
         {selectedOffer && (
           <section className={styles.chartSection}>
-            <h2>Conversion Trend: {selectedOffer.offerName}</h2>
+            <h2>Conversion Trend (24h): {selectedOffer.offerName}</h2>
             {chartLoading ? (
               <div className={styles.loading}>Loading chart...</div>
             ) : chartData.length > 0 ? (
