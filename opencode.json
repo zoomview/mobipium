@@ -1,0 +1,4 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": "记住以下规则：\n1. 任何代码修改后，推送前必须说\"推送前确认\"\n2. 不确定的问题先问\n3. 用户说\"可以\"后才能执行 git push\n\n执行任何 git push 之前，必须先输出确认模板并等待用户回复\"可以\""
+}
