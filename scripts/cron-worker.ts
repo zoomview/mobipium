@@ -10,6 +10,9 @@
  * - 每 2 分钟执行一次 FULL 任务（分页抓取）
  */
 
+// 显式加载环境变量
+import 'dotenv/config'
+
 import { cronJobQueue, addCronJob } from '../lib/queue'
 import { processCronJob } from '../lib/cron-worker'
 
